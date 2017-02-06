@@ -117,7 +117,6 @@ def strategy(sdk):
         positions = sdk.getPositions()
         position_dict = dict([[i.code, i.optPosition] for i in positions])
         stock_with_position = [i.code for i in positions]
-        sdk.sdklog(len(stock_with_position))
         # 找到中证500外的有仓位的股票
         zz500 = sdk.getGlobal('zz500')
         out_zz500_stock = list(set(stock_with_position) - set(zz500))
@@ -368,7 +367,7 @@ def strategy(sdk):
         sdk.setGlobal('stock_position', stock_position)
         sdk.setGlobal('buy_and_hold', buy_and_hold)
         sdk.setGlobal('buy_and_hold_time', buy_and_hold_time)
-        if sdk.getNowTime() == '150000':
+        if sdk.getNowTime() == '146900':
             sdk.sdklog(sdk.getQueueOrders(), '====当日未成交排队订单')
             print sdk.getQueueOrders()
 
