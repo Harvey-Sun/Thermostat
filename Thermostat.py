@@ -368,6 +368,9 @@ def strategy(sdk):
         sdk.setGlobal('stock_position', stock_position)
         sdk.setGlobal('buy_and_hold', buy_and_hold)
         sdk.setGlobal('buy_and_hold_time', buy_and_hold_time)
+        if sdk.getNowTime() == '150000':
+            sdk.sdklog(sdk.getQueueOrders(), '====当日未成交排队订单')
+            print sdk.getQueueOrders()
 
 
 config = {
