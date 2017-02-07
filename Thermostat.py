@@ -54,8 +54,9 @@ def init_per_day(sdk):
     stock_with_position = [i.code for i in positions]
     # 找到中证500外的有仓位的股票
     out_zz500_stock = list(set(stock_with_position) - set(zz500))
-    # 以下代码获取当天未停牌未退市的股票，即可交易股票
+    # 以下代码获取当天未停牌股票，即可交易股票
     not_stop = pd.isnull(sdk.getFieldData('LZ_GPA_SLCIND_STOP_FLAG')[-(window_cmi + 1):]).all(axis=0)  # 当日和前window1日均没有停牌的股票
+    sdk.sdklog(pd.Series(sdk.getFieldData('LZ_GPA_SLCIND_STOP_FLAG')[-1], index=stock_list)[['000510', '002129']])
     zz500_available = list(pd.Series(stock_list)[np.logical_and(in_zz500, not_stop)])
     sdk.setGlobal('zz500_available', zz500_available)
     # 以下代码获取当天被移出中证500的有仓位的股票中可交易的股票
@@ -206,7 +207,7 @@ def strategy(sdk):
                           (abs(current_price - stock_position[stock]['open_price']) > 3 * atr[stock]))
                     sig3 = ((stock_position[stock]['open_mkt'] == 'V') &
                             (stock in vibrate_stocks) &
-                            (current_price < sell_line))
+                            (current_price < sell_line[stock]))
                     if sig1 or sig2 or sig3:
                         order = [stock, current_price, position, -1]
                         sell_orders_out500.append(order)
@@ -367,9 +368,14 @@ def strategy(sdk):
         sdk.setGlobal('stock_position', stock_position)
         sdk.setGlobal('buy_and_hold', buy_and_hold)
         sdk.setGlobal('buy_and_hold_time', buy_and_hold_time)
-        if sdk.getNowTime() == '146900':
-            sdk.sdklog(sdk.getQueueOrders(), '====当日未成交排队订单')
-            print sdk.getQueueOrders()
+
+    if (sdk.getNowDate() == '20161230') & (sdk.getNowTime() == '150000'):
+        buy_and_hold = sdk.getGlobal('buy_and_hold')
+        buy_and_hold_time = sdk.getGlobal('buy_and_hold_time')
+        temp = pd.DataFrame(buy_and_hold_time)
+        temp = pd.concat([temp, pd.Series(buy_and_hold)], axis=1)
+        pd.DataFrame(temp).to_csv('buy_and_hold.csv')
+
 
 
 config = {
@@ -389,7 +395,7 @@ config = {
     'feeLimit': 5,
     'cycle': 1,
     'dealByVolume': True,
-    'allowfortodayfactor': ['LZ_GPA_INDEX_CSI500MEMBER', 'LZ_GPA_SLCIND_STOP_FLAG']
+    'allowForTodayFactors': ['LZ_GPA_INDEX_CSI500MEMBER', 'LZ_GPA_SLCIND_STOP_FLAG']
 }
 
 if __name__ == "__main__":
