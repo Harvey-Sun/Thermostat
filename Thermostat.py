@@ -56,7 +56,6 @@ def init_per_day(sdk):
     out_zz500_stock = list(set(stock_with_position) - set(zz500))
     # 以下代码获取当天未停牌股票，即可交易股票
     not_stop = pd.isnull(sdk.getFieldData('LZ_GPA_SLCIND_STOP_FLAG')[-(window_cmi + 1):]).all(axis=0)  # 当日和前window1日均没有停牌的股票
-    sdk.sdklog(pd.Series(sdk.getFieldData('LZ_GPA_SLCIND_STOP_FLAG')[-1], index=stock_list)[['000510', '002129']])
     zz500_available = list(pd.Series(stock_list)[np.logical_and(in_zz500, not_stop)])
     sdk.setGlobal('zz500_available', zz500_available)
     # 以下代码获取当天被移出中证500的有仓位的股票中可交易的股票
@@ -115,6 +114,7 @@ def strategy(sdk):
     if (sdk.getNowTime() >= '093000') & (sdk.getNowTime() < '150000'):
         today = sdk.getNowDate()
         # 获取仓位信息及有仓位的股票
+        print sdk.getQueueOrders()
         positions = sdk.getPositions()
         position_dict = dict([[i.code, i.optPosition] for i in positions])
         stock_with_position = [i.code for i in positions]
@@ -132,7 +132,7 @@ def strategy(sdk):
         stock_position = sdk.getGlobal('stock_position')
         number = sum([stock_position[stock]['position'] for stock in stock_position.keys()]) / 2.0  # 计算有多少个全仓股
         # 无仓位股票可用资金
-        available_cash = sdk.getAccountInfo().availableCash / (500 - number) if number < 500 else 0
+        available_cash = sdk.getAccountInfo().availableCash / (500 - number) if number < 250 else 0
         # 底仓开平记录
         buy_and_hold = sdk.getGlobal('buy_and_hold')
         buy_and_hold_time = sdk.getGlobal('buy_and_hold_time')
@@ -159,6 +159,7 @@ def strategy(sdk):
             sdk.setGlobal('sell_line', sell_line)
             # 建立底仓
             stock_to_build_base = list(set(zz500_available) - set(stock_position.keys()))
+            traded_stock += stock_to_build_base
             base_hold = []
             date_and_time = []
             for stock in stock_to_build_base:
@@ -169,9 +170,8 @@ def strategy(sdk):
                     base_hold.append(order)
                     date_and_time.append([today, '093000'])
                     stock_position[stock] = {'position': 1}
-                    traded_stock.append(stock)
             sdk.makeOrders(base_hold)
-            sdk.sdklog(len(traded_stock), '=======建立底仓股票数量')
+            sdk.sdklog('%d/%d' %(len(traded_stock), len(stock_to_build_base)), '建立底仓股票数量')
             buy_and_hold += base_hold
             buy_and_hold_time += date_and_time
 		
@@ -193,6 +193,7 @@ def strategy(sdk):
         if out_zz500_tradable:
             for stock in out_zz500_tradable:
                 position = position_dict[stock]
+                print position
                 current_price = quotes[stock].current
                 mid = ma[stock]
                 if stock_position[stock]['position'] == 1:
