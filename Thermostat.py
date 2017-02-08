@@ -114,7 +114,6 @@ def strategy(sdk):
     if (sdk.getNowTime() >= '093000') & (sdk.getNowTime() < '150000'):
         today = sdk.getNowDate()
         # 获取仓位信息及有仓位的股票
-        print sdk.getQueueOrders()
         positions = sdk.getPositions()
         position_dict = dict([[i.code, i.optPosition] for i in positions])
         stock_with_position = [i.code for i in positions]
@@ -144,8 +143,11 @@ def strategy(sdk):
             stock_available = list(set(zz500_available + out_zz500_available))
             # 获取开盘价
             quotes = sdk.getQuotes(stock_available)
+            a = '600037' in stock_available
+            print a
             open_prices = []
             for stock in stock_available:
+                print quotes[stock]
                 open_prices.append(quotes[stock].open)
             Open = pd.Series(open_prices, index=stock_available)
             # 计算震荡市下的信号指标
@@ -190,12 +192,11 @@ def strategy(sdk):
         # 考虑被移出中证500的那些股票
         sell_orders_out500 = []
         date_and_time = []
-        if out_zz500_tradable:
-            for stock in out_zz500_tradable:
-                position = position_dict[stock]
-                print position
-                current_price = quotes[stock].current
-                mid = ma[stock]
+        for stock in out_zz500_tradable:
+            position = position_dict[stock]
+            current_price = quotes[stock].current
+            mid = ma[stock]
+            if quotes[stock].volume > 0:
                 if stock_position[stock]['position'] == 1:
                     order = [stock, current_price, position, -1]
                     sell_orders_out500.append(order)
@@ -214,156 +215,157 @@ def strategy(sdk):
                         sell_orders_out500.append(order)
                         date_and_time.append([today, sdk.getNowTime()])
                         del stock_position[stock]
-        sdk.makeOrders(sell_orders_out500)
-        buy_and_hold += sell_orders_out500
-        buy_and_hold_time += date_and_time
+            sdk.makeOrders(sell_orders_out500)
+            buy_and_hold += sell_orders_out500
+            buy_and_hold_time += date_and_time
 
         # 考虑当日中证500可交易的股票
         buy_orders = []
         sell_orders = []
         for stock in zz500_tradable:
             current_price = quotes[stock].current
-            if stock in vibrate_stocks:  # 震荡市
-                sell_point = sell_line[stock]
-                buy_point = buy_line[stock]
-                close_point = ma[stock]
-                if stock_position[stock]['position'] == 1:  # 只有底仓
-                    if current_price > buy_point:  # 做多
-                        volume = 100 * np.floor(available_cash * 0.5 / (100 * current_price))
-                        if volume > 0:
+            if quotes[stock].volume >0 :
+                if stock in vibrate_stocks:  # 震荡市
+                    sell_point = sell_line[stock]
+                    buy_point = buy_line[stock]
+                    close_point = ma[stock]
+                    if stock_position[stock]['position'] == 1:  # 只有底仓
+                        if current_price > buy_point:  # 做多
+                            volume = 100 * np.floor(available_cash * 0.5 / (100 * current_price))
+                            if volume > 0:
+                                order = [stock, current_price, volume, 1]
+                                buy_orders.append(order)
+                                traded_stock.append(stock)
+                                stock_position[stock]['position'] = 2
+                                stock_position[stock]['open_price'] = current_price
+                                stock_position[stock]['open_mkt'] = 'V'
+                                stock_position[stock]['open_vol'] = volume
+                        elif current_price < sell_point:  # 做空
+                            volume = position_dict[stock]
+                            order = [stock, current_price, volume, -1]
+                            sell_orders.append(order)
+                            traded_stock.append(stock)
+                            stock_position[stock]['position'] = 0
+                            stock_position[stock]['open_price'] = current_price
+                            stock_position[stock]['open_mkt'] = 'V'
+                            stock_position[stock]['open_vol'] = volume
+                    elif stock_position[stock]['position'] == 0:  # 当前空头
+                        if (stock_position[stock]['open_mkt'] == 'V') & (current_price > buy_point):  # 震荡市下开的仓，平空做多
+                            close_volume = stock_position[stock]['open_vol']
+                            open_volume = 100 * np.floor(available_cash * 0.5 / (100 * current_price))
+                            volume = close_volume + open_volume
                             order = [stock, current_price, volume, 1]
                             buy_orders.append(order)
                             traded_stock.append(stock)
                             stock_position[stock]['position'] = 2
                             stock_position[stock]['open_price'] = current_price
                             stock_position[stock]['open_mkt'] = 'V'
+                            stock_position[stock]['open_vol'] = open_volume
+                        elif (stock_position[stock]['open_mkt'] == 'T') & (current_price > close_point):  # 趋势市下开的仓，平空
+                            volume = stock_position[stock]['open_vol']
+                            order = [stock, current_price, volume, 1]
+                            buy_orders.append(order)
+                            traded_stock.append(stock)
+                            stock_position[stock]['position'] = 1
+                            stock_position[stock]['open_price'] = 0
+                            stock_position[stock]['open_mkt'] = 'No'
+                            stock_position[stock]['open_vol'] = 0
+                    elif stock_position[stock]['position'] == 2:  # 当前多头
+                        if (stock_position[stock]['open_mkt'] == 'V') & (current_price < sell_point):  # 震荡市下开的仓，平多做空
+                            volume = position_dict[stock]
+                            order = [stock, current_price, volume, -1]
+                            sell_orders.append(order)
+                            traded_stock.append(stock)
+                            stock_position[stock]['position'] = 0
+                            stock_position[stock]['open_price'] = current_price
+                            stock_position[stock]['open_mkt'] = 'V'
+                            stock_position[stock]['open_vol'] = volume - stock_position[stock]['open_vol']
+                        elif (stock_position[stock]['open_mkt'] == 'T') & (current_price < close_point): # 趋势市下开的仓，平多
+                            volume = stock_position[stock]['open_vol']
+                            order = [stock, current_price, volume, -1]
+                            sell_orders.append(order)
+                            traded_stock.append(stock)
+                            stock_position[stock]['position'] = 1
+                            stock_position[stock]['open_price'] = 0
+                            stock_position[stock]['open_mkt'] = 'No'
+                            stock_position[stock]['open_vol'] = 0
+                elif stock in trend_stocks:  # 趋势市
+                    buy_point = up_line[stock]
+                    sell_point = dn_line[stock]
+                    close_point = ma[stock]
+                    if stock_position[stock]['position'] == 1:  # 只有底仓
+                        if current_price > buy_point:  # 做多
+                            volume = 100 * np.floor(available_cash * 0.5 / (100 * current_price))
+                            if volume > 0:
+                                order = [stock, current_price, volume, 1]
+                                buy_orders.append(order)
+                                traded_stock.append(stock)
+                                stock_position[stock]['position'] = 2
+                                stock_position[stock]['open_price'] = current_price
+                                stock_position[stock]['open_mkt'] = 'T'
+                                stock_position[stock]['open_vol'] = volume
+                        elif current_price < sell_point:  # 做空
+                            volume = position_dict[stock]
+                            order = [stock, current_price, volume, -1]
+                            sell_orders.append(order)
+                            traded_stock.append(stock)
+                            stock_position[stock]['position'] = 0
+                            stock_position[stock]['open_price'] = current_price
+                            stock_position[stock]['open_mkt'] = 'T'
                             stock_position[stock]['open_vol'] = volume
-                    elif current_price < sell_point:  # 做空
-                        volume = position_dict[stock]
-                        order = [stock, current_price, volume, -1]
-                        sell_orders.append(order)
-                        traded_stock.append(stock)
-                        stock_position[stock]['position'] = 0
-                        stock_position[stock]['open_price'] = current_price
-                        stock_position[stock]['open_mkt'] = 'V'
-                        stock_position[stock]['open_vol'] = volume
-                elif stock_position[stock]['position'] == 0:  # 当前空头
-                    if (stock_position[stock]['open_mkt'] == 'V') & (current_price > buy_point):  # 震荡市下开的仓，平空做多
-                        close_volume = stock_position[stock]['open_vol']
-                        open_volume = 100 * np.floor(available_cash * 0.5 / (100 * current_price))
-                        volume = close_volume + open_volume
-                        order = [stock, current_price, volume, 1]
-                        buy_orders.append(order)
-                        traded_stock.append(stock)
-                        stock_position[stock]['position'] = 2
-                        stock_position[stock]['open_price'] = current_price
-                        stock_position[stock]['open_mkt'] = 'V'
-                        stock_position[stock]['open_vol'] = open_volume
-                    elif (stock_position[stock]['open_mkt'] == 'T') & (current_price > close_point):  # 趋势市下开的仓，平空
-                        volume = stock_position[stock]['open_vol']
-                        order = [stock, current_price, volume, 1]
-                        buy_orders.append(order)
-                        traded_stock.append(stock)
-                        stock_position[stock]['position'] = 1
-                        stock_position[stock]['open_price'] = 0
-                        stock_position[stock]['open_mkt'] = 'No'
-                        stock_position[stock]['open_vol'] = 0
-                elif stock_position[stock]['position'] == 2:  # 当前多头
-                    if (stock_position[stock]['open_mkt'] == 'V') & (current_price < sell_point):  # 震荡市下开的仓，平多做空
-                        volume = position_dict[stock]
-                        order = [stock, current_price, volume, -1]
-                        sell_orders.append(order)
-                        traded_stock.append(stock)
-                        stock_position[stock]['position'] = 0
-                        stock_position[stock]['open_price'] = current_price
-                        stock_position[stock]['open_mkt'] = 'V'
-                        stock_position[stock]['open_vol'] = volume - stock_position[stock]['open_vol']
-                    elif (stock_position[stock]['open_mkt'] == 'T') & (current_price < close_point): # 趋势市下开的仓，平多
-                        volume = stock_position[stock]['open_vol']
-                        order = [stock, current_price, volume, -1]
-                        sell_orders.append(order)
-                        traded_stock.append(stock)
-                        stock_position[stock]['position'] = 1
-                        stock_position[stock]['open_price'] = 0
-                        stock_position[stock]['open_mkt'] = 'No'
-                        stock_position[stock]['open_vol'] = 0
-            elif stock in trend_stocks:  # 趋势市
-                buy_point = up_line[stock]
-                sell_point = dn_line[stock]
-                close_point = ma[stock]
-                if stock_position[stock]['position'] == 1:  # 只有底仓
-                    if current_price > buy_point:  # 做多
-                        volume = 100 * np.floor(available_cash * 0.5 / (100 * current_price))
-                        if volume > 0:
+                    elif stock_position[stock]['position'] == 0:  # 目前空头
+                        if (stock_position[stock]['open_mkt'] == 'V') & (abs(current_price - stock_position[stock]['open_price']) > 3 * atr[stock]):  # 震荡市开的仓，平空
+                            volume = stock_position[stock]['oen_vol']
+                            order = [stock, current_price, volume, 1]
+                            buy_orders.append(order)
+                            traded_stock.append(stock)
+                            stock_position[stock]['position'] = 1
+                            stock_position[stock]['open_price'] = 0
+                            stock_position[stock]['open_mkt'] = 'No'
+                            stock_position[stock]['open_vol'] = 0
+                        elif (stock_position[stock]['open_mkt'] == 'T') & (current_price > close_point):  # 趋势市开的仓，平空做多
+                            close_volume = stock_position[stock]['open_vol']
+                            open_volume = 100 * np.floor(available_cash * 0.5 / (100 * current_price))
+                            volume = close_volume + open_volume
                             order = [stock, current_price, volume, 1]
                             buy_orders.append(order)
                             traded_stock.append(stock)
                             stock_position[stock]['position'] = 2
                             stock_position[stock]['open_price'] = current_price
                             stock_position[stock]['open_mkt'] = 'T'
-                            stock_position[stock]['open_vol'] = volume
-                    elif current_price < sell_point:  # 做空
-                        volume = position_dict[stock]
-                        order = [stock, current_price, volume, -1]
-                        sell_orders.append(order)
-                        traded_stock.append(stock)
-                        stock_position[stock]['position'] = 0
-                        stock_position[stock]['open_price'] = current_price
-                        stock_position[stock]['open_mkt'] = 'T'
-                        stock_position[stock]['open_vol'] = volume
-                elif stock_position[stock]['position'] == 0:  # 目前空头
-                    if (stock_position[stock]['open_mkt'] == 'V') & (abs(current_price - stock_position[stock]['open_price']) > 3 * atr[stock]):  # 震荡市开的仓，平空
-                        volume = stock_position[stock]['oen_vol']
-                        order = [stock, current_price, volume, 1]
-                        buy_orders.append(order)
-                        traded_stock.append(stock)
-                        stock_position[stock]['position'] = 1
-                        stock_position[stock]['open_price'] = 0
-                        stock_position[stock]['open_mkt'] = 'No'
-                        stock_position[stock]['open_vol'] = 0
-                    elif (stock_position[stock]['open_mkt'] == 'T') & (current_price > close_point):  # 趋势市开的仓，平空做多
-                        close_volume = stock_position[stock]['open_vol']
-                        open_volume = 100 * np.floor(available_cash * 0.5 / (100 * current_price))
-                        volume = close_volume + open_volume
-                        order = [stock, current_price, volume, 1]
-                        buy_orders.append(order)
-                        traded_stock.append(stock)
-                        stock_position[stock]['position'] = 2
-                        stock_position[stock]['open_price'] = current_price
-                        stock_position[stock]['open_mkt'] = 'T'
-                        stock_position[stock]['open_vol'] = open_volume
-                elif stock_position[stock]['position'] == 2:  # 目前多头
-                    if (stock_position[stock]['open_mkt'] == 'V') & (abs(current_price - stock_position[stock]['open_price']) > 3 * atr[stock]):  # 震荡市开的仓，平多
-                        volume = stock_position[stock]['oen_vol']
-                        order = [stock, current_price, volume, -1]
-                        sell_orders.append(order)
-                        traded_stock.append(stock)
-                        stock_position[stock]['position'] = 1
-                        stock_position[stock]['open_price'] = 0
-                        stock_position[stock]['open_mkt'] = 'No'
-                        stock_position[stock]['open_vol'] = 0
-                    elif (stock_position[stock]['open_mkt'] == 'T') & (current_price < close_point):  # 趋势市开的仓，平多做空
-                        volume = position_dict[stock]
-                        order = [stock, current_price, volume, -1]
-                        sell_orders.append(order)
-                        traded_stock.append(stock)
-                        stock_position[stock]['position'] = 0
-                        stock_position[stock]['open_price'] = current_price
-                        stock_position[stock]['open_mkt'] = 'T'
-                        stock_position[stock]['open_vol'] = volume - stock_position[stock]['open_vol']
+                            stock_position[stock]['open_vol'] = open_volume
+                    elif stock_position[stock]['position'] == 2:  # 目前多头
+                        if (stock_position[stock]['open_mkt'] == 'V') & (abs(current_price - stock_position[stock]['open_price']) > 3 * atr[stock]):  # 震荡市开的仓，平多
+                            volume = stock_position[stock]['oen_vol']
+                            order = [stock, current_price, volume, -1]
+                            sell_orders.append(order)
+                            traded_stock.append(stock)
+                            stock_position[stock]['position'] = 1
+                            stock_position[stock]['open_price'] = 0
+                            stock_position[stock]['open_mkt'] = 'No'
+                            stock_position[stock]['open_vol'] = 0
+                        elif (stock_position[stock]['open_mkt'] == 'T') & (current_price < close_point):  # 趋势市开的仓，平多做空
+                            volume = position_dict[stock]
+                            order = [stock, current_price, volume, -1]
+                            sell_orders.append(order)
+                            traded_stock.append(stock)
+                            stock_position[stock]['position'] = 0
+                            stock_position[stock]['open_price'] = current_price
+                            stock_position[stock]['open_mkt'] = 'T'
+                            stock_position[stock]['open_vol'] = volume - stock_position[stock]['open_vol']
         sdk.makeOrders(sell_orders)
         sdk.makeOrders(buy_orders)
         # 记录下单数据
         if buy_orders or sell_orders or sell_orders_out500:
             sdk.sdklog(sdk.getNowTime(), '=================时间')
             if buy_orders:
-                sdk.sdklog('Buy orders')
+                sdk.sdklog('买单')
                 sdk.sdklog(np.array(buy_orders))
             if sell_orders:
-                sdk.sdklog('Sell orders')
+                sdk.sdklog('卖单')
                 sdk.sdklog(np.array(sell_orders))
             if sell_orders_out500:
-                sdk.sdklog('Sell removed stocks')
+                sdk.sdklog('卖出已不在中证500的股票')
                 sdk.sdklog(np.array(sell_orders_out500))
         sdk.setGlobal('traded_stock', traded_stock)
         sdk.setGlobal('stock_position', stock_position)
