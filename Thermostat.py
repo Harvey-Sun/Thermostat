@@ -143,11 +143,8 @@ def strategy(sdk):
             stock_available = list(set(zz500_available + out_zz500_available))
             # 获取开盘价
             quotes = sdk.getQuotes(stock_available)
-            a = '600037' in stock_available
-            print a
             open_prices = []
             for stock in stock_available:
-                print quotes[stock]
                 open_prices.append(quotes[stock].open)
             Open = pd.Series(open_prices, index=stock_available)
             # 计算震荡市下的信号指标
