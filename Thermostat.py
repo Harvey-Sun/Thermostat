@@ -312,7 +312,7 @@ def strategy(sdk):
                             stock_position[stock]['open_vol'] = volume
                     elif stock_position[stock]['position'] == 0:  # 目前空头
                         if (stock_position[stock]['open_mkt'] == 'V') & (abs(current_price - stock_position[stock]['open_price']) > 3 * atr[stock]):  # 震荡市开的仓，平空
-                            volume = stock_position[stock]['oen_vol']
+                            volume = stock_position[stock]['open_vol']
                             order = [stock, current_price, volume, 1]
                             buy_orders.append(order)
                             traded_stock.append(stock)
@@ -320,20 +320,18 @@ def strategy(sdk):
                             stock_position[stock]['open_price'] = 0
                             stock_position[stock]['open_mkt'] = 'No'
                             stock_position[stock]['open_vol'] = 0
-                        elif (stock_position[stock]['open_mkt'] == 'T') & (current_price > close_point):  # 趋势市开的仓，平空做多
-                            close_volume = stock_position[stock]['open_vol']
-                            open_volume = 100 * np.floor(available_cash * 0.5 / (100 * current_price))
-                            volume = close_volume + open_volume
+                        elif (stock_position[stock]['open_mkt'] == 'T') & (current_price > close_point):  # 趋势市开的仓，平空
+                            volume = stock_position[stock]['open_vol']
                             order = [stock, current_price, volume, 1]
                             buy_orders.append(order)
                             traded_stock.append(stock)
-                            stock_position[stock]['position'] = 2
-                            stock_position[stock]['open_price'] = current_price
-                            stock_position[stock]['open_mkt'] = 'T'
-                            stock_position[stock]['open_vol'] = open_volume
+                            stock_position[stock]['position'] = 1
+                            stock_position[stock]['open_price'] = 0
+                            stock_position[stock]['open_mkt'] = 'No'
+                            stock_position[stock]['open_vol'] = 0
                     elif stock_position[stock]['position'] == 2:  # 目前多头
                         if (stock_position[stock]['open_mkt'] == 'V') & (abs(current_price - stock_position[stock]['open_price']) > 3 * atr[stock]):  # 震荡市开的仓，平多
-                            volume = stock_position[stock]['oen_vol']
+                            volume = stock_position[stock]['open_vol']
                             order = [stock, current_price, volume, -1]
                             sell_orders.append(order)
                             traded_stock.append(stock)
@@ -341,15 +339,15 @@ def strategy(sdk):
                             stock_position[stock]['open_price'] = 0
                             stock_position[stock]['open_mkt'] = 'No'
                             stock_position[stock]['open_vol'] = 0
-                        elif (stock_position[stock]['open_mkt'] == 'T') & (current_price < close_point):  # 趋势市开的仓，平多做空
-                            volume = position_dict[stock]
+                        elif (stock_position[stock]['open_mkt'] == 'T') & (current_price < close_point):  # 趋势市开的仓，平多
+                            volume = stock_position[stock]['open_vol']
                             order = [stock, current_price, volume, -1]
                             sell_orders.append(order)
                             traded_stock.append(stock)
-                            stock_position[stock]['position'] = 0
-                            stock_position[stock]['open_price'] = current_price
-                            stock_position[stock]['open_mkt'] = 'T'
-                            stock_position[stock]['open_vol'] = volume - stock_position[stock]['open_vol']
+                            stock_position[stock]['position'] = 1
+                            stock_position[stock]['open_price'] = 0
+                            stock_position[stock]['open_mkt'] = 'No'
+                            stock_position[stock]['open_vol'] = 0
         sdk.makeOrders(sell_orders)
         sdk.makeOrders(buy_orders)
         # 记录下单数据
