@@ -328,6 +328,7 @@ def strategy(sdk):
                             stock_position[stock]['position'] = 1
                             stock_position[stock]['open_price'] = 0
                             stock_position[stock]['open_mkt'] = 'No'
+
                             stock_position[stock]['open_vol'] = 0
                     elif stock_position[stock]['position'] == 2:  # 目前多头
                         if (stock_position[stock]['open_mkt'] == 'V') & (abs(current_price - stock_position[stock]['open_price']) > 3 * atr[stock]):  # 震荡市开的仓，平多
